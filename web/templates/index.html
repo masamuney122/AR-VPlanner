@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR-VPlanner - AI Travel Planner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent: #8b5cf6;
+            --accent-hover: #7c3aed;
+            --user-msg: #2563eb;
+            --assistant-msg: #334155;
+            --border: #334155;
+            --green: #22c55e;
+            --orange: #f59e0b;
+            --blue: #3b82f6;
+            --pink: #ec4899;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .app-container { display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .logo {
+            font-size: 22px; font-weight: 700;
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .subtitle { font-size: 11px; color: var(--text-secondary); }
+        .status-badge {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 10px; background: rgba(34,197,94,0.1);
+            border-radius: 16px; font-size: 11px; color: #22c55e;
+        }
+        .status-dot {
+            width: 6px; height: 6px; border-radius: 50%; background: #22c55e;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        
+        /* Main Chat */
+        .chat-container {
+            flex: 1; overflow-y: auto; padding: 20px;
+            display: flex; flex-direction: column; gap: 16px;
+        }
+        .chat-container::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-track { background: var(--bg-primary); }
+        .chat-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        
+        /* Welcome */
+        .welcome {
+            display: flex; flex-direction: column; align-items: center;
+            text-align: center; padding: 40px 20px; margin: auto;
+        }
+        .welcome-icon { font-size: 56px; margin-bottom: 20px; animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        .welcome h1 {
+            font-size: 28px; margin-bottom: 10px;
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .welcome p { color: var(--text-secondary); font-size: 15px; margin-bottom: 28px; max-width: 500px; }
+        
+        .example-prompts {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px; width: 100%; max-width: 800px;
+        }
+        .example-prompt {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s; text-align: left;
+        }
+        .example-prompt:hover {
+            border-color: var(--accent); transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139,92,246,0.2);
+        }
+        .example-prompt-title { font-weight: 600; margin-bottom: 3px; font-size: 13px; }
+        .example-prompt-text { font-size: 12px; color: var(--text-secondary); }
+        
+        /* Messages */
+        .message { display: flex; gap: 10px; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .message.user { flex-direction: row-reverse; }
+        .avatar {
+            width: 30px; height: 30px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; flex-shrink: 0;
+        }
+        .avatar.user { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+        .avatar.assistant { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .message-content {
+            max-width: 80%; padding: 10px 14px; border-radius: 14px; line-height: 1.5; font-size: 14px;
+        }
+        .message.user .message-content { background: var(--user-msg); }
+        .message.assistant .message-content { background: var(--assistant-msg); }
+        
+        /* Typing */
+        .typing-dots {
+            display: flex; gap: 4px; padding: 10px 14px;
+            background: var(--assistant-msg); border-radius: 14px;
+        }
+        .typing-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--text-secondary); animation: typing 1.4s infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing { 0%,60%,100%{opacity:0.3;transform:translateY(0)} 30%{opacity:1;transform:translateY(-8px)} }
+        
+        /* ======= ITINERARY CARD ======= */
+        .itinerary-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 16px; overflow: hidden; max-width: 700px; width: 100%;
+        }
+        .itin-header {
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            padding: 20px; color: white;
+        }
+        .itin-header h2 { font-size: 20px; margin-bottom: 4px; }
+        .itin-header p { font-size: 13px; opacity: 0.9; }
+        
+        /* Budget bar */
+        .budget-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+        .budget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+        .budget-item { text-align: center; }
+        .budget-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+        .budget-value { font-size: 15px; font-weight: 700; }
+        .budget-bar { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
+        .budget-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+        .budget-remaining { font-size: 12px; color: var(--green); margin-top: 6px; text-align: right; }
+        
+        /* Accommodation */
+        .accommodation {
+            padding: 14px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 14px;
+        }
+        .accom-icon { font-size: 28px; }
+        .accom-info { flex: 1; }
+        .accom-name { font-weight: 600; font-size: 14px; }
+        .accom-detail { font-size: 12px; color: var(--text-secondary); }
+        .accom-price { font-weight: 700; color: var(--accent); font-size: 15px; }
+        
+        /* Day tabs */
+        .day-tabs { display: flex; padding: 0 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+        .day-tab {
+            padding: 10px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+            border-bottom: 2px solid transparent; white-space: nowrap;
+            color: var(--text-secondary); transition: all 0.2s;
+        }
+        .day-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .day-tab:hover { color: var(--text-primary); }
+        
+        /* Day content */
+        .day-content { padding: 16px 20px; display: none; }
+        .day-content.active { display: block; }
+        .day-summary {
+            display: flex; gap: 16px; margin-bottom: 14px;
+            font-size: 12px; color: var(--text-secondary);
+        }
+        .day-summary span { display: flex; align-items: center; gap: 4px; }
+        
+        /* Place card */
+        .place-card {
+            background: var(--bg-primary); border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 8px;
+            border-left: 3px solid var(--accent);
+        }
+        .place-top { display: flex; justify-content: space-between; align-items: start; }
+        .place-name { font-weight: 600; font-size: 14px; }
+        .place-cost { color: var(--accent); font-weight: 600; font-size: 13px; }
+        .place-meta {
+            display: flex; gap: 12px; margin-top: 4px;
+            font-size: 12px; color: var(--text-secondary);
+        }
+        .place-desc { font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.4; }
+        
+        /* Transport leg */
+        .transport-leg {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 14px; font-size: 12px; color: var(--text-secondary);
+        }
+        .transport-leg .arrow { color: var(--accent); }
+        
+        /* Explanation */
+        .explanation {
+            padding: 14px 20px; border-top: 1px solid var(--border);
+            font-size: 13px; line-height: 1.5; color: var(--text-secondary);
+        }
+        
+        /* Input */
+        .input-container {
+            background: var(--bg-secondary); border-top: 1px solid var(--border); padding: 14px 24px;
+        }
+        .input-wrapper { max-width: 800px; margin: 0 auto; display: flex; gap: 10px; align-items: end; }
+        .input-box {
+            flex: 1; background: var(--bg-primary); border: 1px solid var(--border);
+            border-radius: 12px; padding: 10px 14px; color: var(--text-primary);
+            font-size: 14px; font-family: inherit; resize: none;
+            min-height: 22px; max-height: 100px; transition: border-color 0.2s;
+        }
+        .input-box:focus { outline: none; border-color: var(--accent); }
+        .input-box::placeholder { color: var(--text-secondary); }
+        .send-button {
+            width: 38px; height: 38px; border-radius: 8px; border: none;
+            background: var(--accent); color: white; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; transition: all 0.2s; flex-shrink: 0;
+        }
+        .send-button:hover:not(:disabled) { background: var(--accent-hover); transform: scale(1.05); }
+        .send-button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .input-hint { text-align: center; font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <div class="header-left">
+                <div>
+                    <div class="logo">✈️ AR-VPlanner</div>
+                    <div class="subtitle">Google Places & Maps Powered Itinerary</div>
+                </div>
+            </div>
+            <div class="status-badge"><span class="status-dot"></span>AI Planner Active</div>
+        </div>
+        
+        <div class="chat-container" id="chatContainer">
+            <div class="welcome" id="welcomeScreen">
+                <div class="welcome-icon">🗺️</div>
+                <h1>Gezi Rotanızı Oluşturalım</h1>
+                <p>Bir şehir, tarih ve bütçe belirtin — günlük rota, konaklama, ulaşım süreleri ve bütçe dağılımı ile tam bir plan oluşturalım</p>
+                <div class="example-prompts">
+                    <div class="example-prompt" onclick="sendExamplePrompt('İstanbul\'da 3 günlük bir gezi planla, bütçem 5000 TL')">
+                        <div class="example-prompt-title">🏛️ İstanbul Kültür</div>
+                        <div class="example-prompt-text">3 gün, 5000 TL</div>
+                    </div>
+                    <div class="example-prompt" onclick="sendExamplePrompt('Antalya\'da 4 günlük tatil planı yap, 8000 TL bütçe')">
+                        <div class="example-prompt-title">🏖️ Antalya Tatil</div>
+                        <div class="example-prompt-text">4 gün, 8000 TL</div>
+                    </div>
+                    <div class="example-prompt" onclick="sendExamplePrompt('İzmir\'de 2 günlük gezi, bütçe 3000 TL, tarih ve deniz ilgim var')">
+                        <div class="example-prompt-title">🌊 İzmir Keşif</div>
+                        <div class="example-prompt-text">2 gün, 3000 TL</div>
+                    </div>
+                    <div class="example-prompt" onclick="sendExamplePrompt('Kapadokya\'da 2 günlük macera planla, 4000 TL')">
+                        <div class="example-prompt-title">🎈 Kapadokya</div>
+                        <div class="example-prompt-text">2 gün, 4000 TL</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea id="messageInput" class="input-box" 
+                    placeholder="Sehir, gün sayısı ve bütçe yazın... (Örn: İstanbul'da 3 gün, 5000 TL)" rows="1"></textarea>
+                <button id="sendButton" class="send-button" onclick="sendMessage()">➤</button>
+            </div>
+            <div class="input-hint">💡 Serbest sohbet veya gezi planı oluşturabilirsiniz</div>
+        </div>
+    </div>
+
+<script>
+const chatContainer = document.getElementById('chatContainer');
+const messageInput = document.getElementById('messageInput');
+const sendButton = document.getElementById('sendButton');
+const welcomeScreen = document.getElementById('welcomeScreen');
+let chatHistory = [];
+
+messageInput.addEventListener('input', function() { this.style.height='auto'; this.style.height=this.scrollHeight+'px'; });
+messageInput.addEventListener('keydown', function(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} });
+
+function sendExamplePrompt(t) { messageInput.value=t; sendMessage(); }
+
+function isTravelRequest(msg) {
+    const tw = [/plan\s*(oluştur|yap|hazırla|la)/i,/gezi\s*plan/i,/seyahat/i,/tatil\s*plan/i,/günlük.*gezi/i,/gün.*plan/i,/bütçe.*TL/i,/\d+\s*TL/i,/\d+\s*gün/i];
+    const lw = /(İstanbul|İzmir|Antalya|Kapadokya|Ankara|Bodrum|Marmaris|Fethiye|Trabzon|Bursa|Konya|Muğla|Eskişehir|Gaziantep)/i;
+    return tw.some(r=>r.test(msg)) || (lw.test(msg)&&msg.length>15);
+}
+
+async function sendMessage() {
+    const message = messageInput.value.trim();
+    if(!message) return;
+    if(welcomeScreen) welcomeScreen.style.display='none';
+    
+    addMessage(message,'user');
+    chatHistory.push({role:'user',content:message});
+    messageInput.value=''; messageInput.style.height='auto';
+    const typingId = addTypingIndicator();
+    sendButton.disabled = true;
+    
+    try {
+        if(isTravelRequest(message)) {
+            const planData = parseUserRequest(message);
+            const resp = await fetch('/api/generate-plan',{
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify(planData)
+            });
+            const data = await resp.json();
+            removeTypingIndicator(typingId);
+            
+            if(data.success) {
+                displayItinerary(data.itinerary);
+                chatHistory.push({role:'assistant',content:'Gezi planı oluşturuldu.'});
+            } else {
+                addMessage('Üzgünüm: ' + data.message, 'assistant');
+            }
+        } else {
+            const resp = await fetch('/api/chat',{
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({message, history: chatHistory.slice(-10)})
+            });
+            const data = await resp.json();
+            removeTypingIndicator(typingId);
+            addMessage(data.success ? data.response : 'Hata: '+data.response, 'assistant');
+            if(data.success) chatHistory.push({role:'assistant',content:data.response});
+        }
+    } catch(err) {
+        removeTypingIndicator(typingId);
+        addMessage('Bağlantı hatası. Tekrar deneyin.','assistant');
+    } finally { sendButton.disabled=false; }
+}
+
+function parseUserRequest(msg) {
+    const today = new Date();
+    const locM = msg.match(/(İstanbul|İzmir|Antalya|Kapadokya|Ankara|Bodrum|Marmaris|Fethiye|Trabzon|Bursa|Konya|Muğla|Eskişehir|Gaziantep)/i);
+    const location = locM ? locM[0] : 'İstanbul';
+    const budgetM = msg.match(/(\d+)\s*(TL|tl|lira)/);
+    const budget = budgetM ? parseFloat(budgetM[1]) : 5000;
+    const daysM = msg.match(/(\d+)\s*(gün|günlük)/);
+    const numDays = daysM ? parseInt(daysM[1]) : 3;
+    const endDate = new Date(today); endDate.setDate(endDate.getDate() + numDays);
+    
+    const interests = [];
+    if(msg.match(/(kültür|tarih|müze)/i)) interests.push('kültür');
+    if(msg.match(/(deniz|plaj|sahil)/i)) interests.push('deniz');
+    if(msg.match(/(doğa|dağ|yürüyüş)/i)) interests.push('doğa');
+    if(msg.match(/(yemek|restoran|mutfak)/i)) interests.push('yemek');
+    if(msg.match(/(macera|ekstrem|spor)/i)) interests.push('macera');
+    if(msg.match(/(romantik|balayı)/i)) interests.push('romantik');
+    
+    return {
+        location, budget,
+        start_date: today.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+        interests: interests.length ? interests : ['genel'],
+        constraints: {}
+    };
+}
+
+function addMessage(content, role) {
+    const d = document.createElement('div'); d.className=`message ${role}`;
+    const av = document.createElement('div'); av.className=`avatar ${role}`; av.textContent=role==='user'?'👤':'🤖';
+    const c = document.createElement('div'); c.className='message-content'; c.textContent=content;
+    d.appendChild(av); d.appendChild(c); chatContainer.appendChild(d); scrollToBottom();
+}
+
+function addTypingIndicator() {
+    const d=document.createElement('div'); d.className='message assistant'; d.id='typing-'+Date.now();
+    const av=document.createElement('div'); av.className='avatar assistant'; av.textContent='🤖';
+    const dots=document.createElement('div'); dots.className='typing-dots';
+    dots.innerHTML='<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+    d.appendChild(av); d.appendChild(dots); chatContainer.appendChild(d); scrollToBottom(); return d.id;
+}
+
+function removeTypingIndicator(id) { const el=document.getElementById(id); if(el) el.remove(); }
+
+// ======= ITINERARY DISPLAY =======
+function displayItinerary(itin) {
+    const d = document.createElement('div'); d.className='message assistant';
+    const av = document.createElement('div'); av.className='avatar assistant'; av.textContent='🤖';
+    const wrapper = document.createElement('div'); wrapper.style.maxWidth='700px'; wrapper.style.width='100%';
+    
+    const b = itin.budget;
+    const usagePct = Math.min((b.total / b.user_budget)*100, 100).toFixed(0);
+    const barColor = b.remaining >= 0 ? 'linear-gradient(90deg, #22c55e, #3b82f6)' : 'linear-gradient(90deg, #ef4444, #f59e0b)';
+    
+    let accHtml = '';
+    if(itin.accommodation) {
+        const a = itin.accommodation;
+        accHtml = `
+        <div class="accommodation">
+            <div class="accom-icon">🏨</div>
+            <div class="accom-info">
+                <div class="accom-name">${a.name}</div>
+                <div class="accom-detail">${a.address} • ${a.rating}⭐ • ${a.total_nights} gece</div>
+            </div>
+            <div class="accom-price">${a.price_per_night.toFixed(0)} TL/gece</div>
+        </div>`;
+    }
+    
+    // Day tabs
+    let tabsHtml = '';
+    let daysHtml = '';
+    itin.days.forEach((day, idx) => {
+        tabsHtml += `<div class="day-tab ${idx===0?'active':''}" onclick="switchDay(this, ${idx})">${day.day_number}. Gün</div>`;
+        
+        let placesHtml = '';
+        day.places.forEach((p, pi) => {
+            placesHtml += `
+            <div class="place-card">
+                <div class="place-top">
+                    <div class="place-name">${p.name}</div>
+                    <div class="place-cost">${p.estimated_cost.toFixed(0)} TL</div>
+                </div>
+                <div class="place-meta">
+                    <span>🏷️ ${p.category}</span>
+                    <span>⏱️ ${p.duration_minutes} dk</span>
+                    ${p.rating ? `<span>⭐ ${p.rating}</span>` : ''}
+                    <span>📍 ${p.address ? p.address.substring(0,40) : ''}</span>
+                </div>
+                ${p.description ? `<div class="place-desc">${p.description}</div>` : ''}
+            </div>`;
+            
+            // Transport leg between places
+            if(pi < day.transport_legs.length) {
+                const leg = day.transport_legs[pi];
+                if(leg) {
+                    placesHtml += `
+                    <div class="transport-leg">
+                        <span class="arrow">↓</span>
+                        🚗 ${leg.distance} • ${leg.duration}
+                    </div>`;
+                }
+            }
+        });
+        
+        daysHtml += `
+        <div class="day-content ${idx===0?'active':''}" id="day-${idx}">
+            <div class="day-summary">
+                <span>📍 ${day.places.length} yer</span>
+                <span>💰 ${day.day_total.toFixed(0)} TL</span>
+                <span>🎯 Etkinlik: ${day.activities_cost.toFixed(0)} TL</span>
+                <span>🍽️ Yemek: ${day.meals_cost.toFixed(0)} TL</span>
+                <span>🚗 Ulaşım: ${day.transport_cost.toFixed(0)} TL</span>
+            </div>
+            ${placesHtml}
+        </div>`;
+    });
+    
+    wrapper.innerHTML = `
+    <div class="itinerary-card">
+        <div class="itin-header">
+            <h2>🗺️ ${itin.city} - ${itin.total_days} Günlük Rota</h2>
+            <p>${itin.explanation || ''}</p>
+        </div>
+        
+        <div class="budget-section">
+            <div class="budget-grid">
+                <div class="budget-item">
+                    <div class="budget-label">🏨 Konaklama</div>
+                    <div class="budget-value" style="color:var(--pink)">${b.accommodation.toFixed(0)} TL</div>
+                </div>
+                <div class="budget-item">
+                    <div class="budget-label">🎯 Etkinlik</div>
+                    <div class="budget-value" style="color:var(--accent)">${b.activities.toFixed(0)} TL</div>
+                </div>
+                <div class="budget-item">
+                    <div class="budget-label">🍽️ Yemek</div>
+                    <div class="budget-value" style="color:var(--orange)">${b.food.toFixed(0)} TL</div>
+                </div>
+                <div class="budget-item">
+                    <div class="budget-label">🚗 Ulaşım</div>
+                    <div class="budget-value" style="color:var(--blue)">${b.transport.toFixed(0)} TL</div>
+                </div>
+            </div>
+            <div class="budget-bar">
+                <div class="budget-fill" style="width:${usagePct}%;background:${barColor}"></div>
+            </div>
+            <div class="budget-remaining">
+                ${b.remaining >= 0 
+                    ? `✅ Kalan: ${b.remaining.toFixed(0)} TL / ${b.user_budget.toFixed(0)} TL bütçe`
+                    : `⚠️ Bütçe aşımı: ${Math.abs(b.remaining).toFixed(0)} TL`
+                }
+            </div>
+        </div>
+        
+        ${accHtml}
+        
+        <div class="day-tabs">${tabsHtml}</div>
+        ${daysHtml}
+    </div>`;
+    
+    d.appendChild(av); d.appendChild(wrapper); chatContainer.appendChild(d); scrollToBottom();
+}
+
+function switchDay(tab, idx) {
+    // Tabs
+    tab.parentElement.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    // Content
+    const card = tab.closest('.itinerary-card');
+    card.querySelectorAll('.day-content').forEach(c=>c.classList.remove('active'));
+    card.querySelector(`#day-${idx}`).classList.add('active');
+}
+
+function scrollToBottom() { chatContainer.scrollTop = chatContainer.scrollHeight; }
+</script>
+</body>
+</html>

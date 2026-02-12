@@ -1,0 +1,21 @@
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+flask>=2.3.0
+flask-cors>=4.0.0
+ortools>=9.7.0
+numpy>=1.24.0
+pandas>=2.0.0
+requests>=2.31.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+# Llama model desteği
+accelerate>=0.20.0
+bitsandbytes>=0.41.0  # Quantization için (opsiyonel)
+# llama-cpp-python>=0.1.78  # Opsiyonel: llama-cpp kullanımı için
+
+
+
+
+
