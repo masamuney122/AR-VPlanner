@@ -46,11 +46,21 @@ def generate_plan():
             itinerary = result['itinerary']
             
             # Itinerary'yi JSON'a çevir
+            verification = itinerary.verification_details or {}
+            per_place = verification.get('per_place', {})
+
             itinerary_dict = {
                 'city': itinerary.city,
                 'total_days': itinerary.total_days,
                 'explanation': itinerary.explanation,
                 'optimization_score': itinerary.optimization_score,
+                'verified': itinerary.verified,
+                'verification': {
+                    'overall_score': verification.get('overall_score', 0),
+                    'verified_count': verification.get('verified_count', 0),
+                    'total_places': verification.get('total_places', 0),
+                    'ratio': verification.get('verification_ratio', 0),
+                },
                 'accommodation': None,
                 'budget': {
                     'accommodation': itinerary.budget.accommodation,
@@ -75,6 +85,8 @@ def generate_plan():
                     'price_per_night': acc.price_per_night,
                     'total_nights': acc.total_nights,
                     'total_cost': acc.total_cost,
+                    'lat': acc.lat,
+                    'lng': acc.lng,
                     'photo_url': google_api.get_photo_url(acc.photo_ref) if acc.photo_ref else '',
                 }
             
@@ -92,6 +104,7 @@ def generate_plan():
                 }
                 
                 for place in day.places:
+                    place_verif = per_place.get(place.name, {})
                     day_dict['places'].append({
                         'name': place.name,
                         'address': place.address,
@@ -103,6 +116,8 @@ def generate_plan():
                         'photo_url': google_api.get_photo_url(place.photo_ref) if place.photo_ref else '',
                         'lat': place.lat,
                         'lng': place.lng,
+                        'verified': place_verif.get('verified', False),
+                        'verification_score': place_verif.get('score', 0),
                     })
                 
                 for leg in day.transport_legs:

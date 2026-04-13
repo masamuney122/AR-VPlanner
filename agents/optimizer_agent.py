@@ -4,13 +4,11 @@ Günlük rota planı oluşturur, bütçe hesaplar, ulaşım sürelerini ekler
 """
 from typing import List, Dict, Any, Optional
 from models.data_models import (
-    Place, Accommodation, DayPlan, TransportLeg, 
+    Place, Accommodation, DayPlan, TransportLeg,
     BudgetBreakdown, Itinerary, AgentResponse, UserPreferences
 )
-from models.message_models import MessageType
 from utils.google_api import google_api
 from utils.config import config
-from utils.message_bus import message_bus
 from datetime import datetime, timedelta
 import math
 
@@ -19,21 +17,13 @@ class OptimizerAgent:
     """Optimizasyon Ajanı - Günlük rota ve bütçe optimizasyonu"""
     
     def __init__(self):
-        self.agent_name = "optimizer"
         self.max_activities_per_day = config.get('itinerary.max_activities_per_day', 5)
         self.daily_start_hour = config.get('itinerary.daily_start_hour', 9)
         self.daily_end_hour = config.get('itinerary.daily_end_hour', 21)
         self.meal_budget_per_day = config.get('itinerary.meal_budget_per_day', 300)
         self.transport_budget_per_day = config.get('itinerary.transport_budget_per_day', 100)
         self.buffer_percentage = config.get('itinerary.buffer_percentage', 10)
-        self._register_message_handler()
-    
-    def _register_message_handler(self):
-        message_bus.subscribe(self.agent_name, self._handle_message)
-    
-    def _handle_message(self, message):
-        pass
-    
+
     def create_itinerary(
         self,
         city: str,
@@ -51,13 +41,6 @@ class OptimizerAgent:
         4. Bütçe dağılımını çıkar
         """
         try:
-            message_bus.send_message(
-                sender=self.agent_name,
-                receiver="broadcast",
-                message_type=MessageType.STATUS_UPDATE,
-                content={"event": "optimization_started"}
-            )
-            
             total_days = (user_prefs.end_date - user_prefs.start_date).days
             if total_days <= 0:
                 total_days = 1
@@ -145,14 +128,7 @@ class OptimizerAgent:
             print(f"\n✅ Itinerary oluşturuldu!")
             print(f"   Toplam maliyet: {grand_total:.0f} TL / {total_budget:.0f} TL bütçe")
             print(f"   Kalan: {total_budget - grand_total:.0f} TL")
-            
-            message_bus.send_message(
-                sender=self.agent_name,
-                receiver="broadcast",
-                message_type=MessageType.NOTIFICATION,
-                content={"event": "optimization_completed", "score": opt_score}
-            )
-            
+
             return AgentResponse(
                 success=True,
                 data=itinerary,

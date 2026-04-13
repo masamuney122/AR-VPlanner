@@ -114,32 +114,6 @@ class Itinerary:
     optimization_score: float = 0.0
 
 
-# Eski uyumluluk için Activity ve TravelPlan (orchestrator tarafından kullanılıyor)
-@dataclass
-class Activity:
-    """Etkinlik veri yapısı (eski uyumluluk)"""
-    name: str
-    description: str
-    location: str
-    duration: int  # dakika
-    cost: float
-    category: str
-    evidence: List[Evidence] = field(default_factory=list)
-    verification_score: Optional[float] = None
-
-
-@dataclass
-class TravelPlan:
-    """Seyahat planı (eski uyumluluk)"""
-    activities: List[Activity]
-    total_cost: float
-    total_duration: int
-    optimization_score: float
-    explanation: str
-    verified: bool = False
-    verification_details: Dict[str, Any] = field(default_factory=dict)
-
-
 @dataclass
 class AgentResponse:
     """Ajan yanıt veri yapısı"""

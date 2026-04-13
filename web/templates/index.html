@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AR-VPlanner - AI Travel Planner</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+
         :root {
             --bg-primary: #0f172a;
             --bg-secondary: #1e293b;
@@ -23,7 +25,7 @@
             --blue: #3b82f6;
             --pink: #ec4899;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
             background: var(--bg-primary);
@@ -31,9 +33,9 @@
             height: 100vh;
             overflow: hidden;
         }
-        
+
         .app-container { display: flex; flex-direction: column; height: 100vh; }
-        
+
         /* Header */
         .header {
             background: var(--bg-secondary);
@@ -60,7 +62,7 @@
             animation: pulse 2s infinite;
         }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        
+
         /* Main Chat */
         .chat-container {
             flex: 1; overflow-y: auto; padding: 20px;
@@ -69,7 +71,7 @@
         .chat-container::-webkit-scrollbar { width: 6px; }
         .chat-container::-webkit-scrollbar-track { background: var(--bg-primary); }
         .chat-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        
+
         /* Welcome */
         .welcome {
             display: flex; flex-direction: column; align-items: center;
@@ -83,7 +85,7 @@
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         .welcome p { color: var(--text-secondary); font-size: 15px; margin-bottom: 28px; max-width: 500px; }
-        
+
         .example-prompts {
             display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 10px; width: 100%; max-width: 800px;
@@ -98,7 +100,7 @@
         }
         .example-prompt-title { font-weight: 600; margin-bottom: 3px; font-size: 13px; }
         .example-prompt-text { font-size: 12px; color: var(--text-secondary); }
-        
+
         /* Messages */
         .message { display: flex; gap: 10px; animation: slideIn 0.3s ease-out; }
         @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
@@ -115,7 +117,7 @@
         }
         .message.user .message-content { background: var(--user-msg); }
         .message.assistant .message-content { background: var(--assistant-msg); }
-        
+
         /* Typing */
         .typing-dots {
             display: flex; gap: 4px; padding: 10px 14px;
@@ -128,7 +130,7 @@
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
         @keyframes typing { 0%,60%,100%{opacity:0.3;transform:translateY(0)} 30%{opacity:1;transform:translateY(-8px)} }
-        
+
         /* ======= ITINERARY CARD ======= */
         .itinerary-card {
             background: var(--bg-card); border: 1px solid var(--border);
@@ -140,7 +142,14 @@
         }
         .itin-header h2 { font-size: 20px; margin-bottom: 4px; }
         .itin-header p { font-size: 13px; opacity: 0.9; }
-        
+
+        /* Map */
+        .itin-map {
+            height: 280px; width: 100%;
+            border-bottom: 1px solid var(--border);
+        }
+        .itin-map .leaflet-control-attribution { font-size: 9px; }
+
         /* Budget bar */
         .budget-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
         .budget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
@@ -150,7 +159,7 @@
         .budget-bar { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
         .budget-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
         .budget-remaining { font-size: 12px; color: var(--green); margin-top: 6px; text-align: right; }
-        
+
         /* Accommodation */
         .accommodation {
             padding: 14px 20px; border-bottom: 1px solid var(--border);
@@ -161,7 +170,7 @@
         .accom-name { font-weight: 600; font-size: 14px; }
         .accom-detail { font-size: 12px; color: var(--text-secondary); }
         .accom-price { font-weight: 700; color: var(--accent); font-size: 15px; }
-        
+
         /* Day tabs */
         .day-tabs { display: flex; padding: 0 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
         .day-tab {
@@ -171,7 +180,7 @@
         }
         .day-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
         .day-tab:hover { color: var(--text-primary); }
-        
+
         /* Day content */
         .day-content { padding: 16px 20px; display: none; }
         .day-content.active { display: block; }
@@ -180,7 +189,7 @@
             font-size: 12px; color: var(--text-secondary);
         }
         .day-summary span { display: flex; align-items: center; gap: 4px; }
-        
+
         /* Place card */
         .place-card {
             background: var(--bg-primary); border-radius: 10px;
@@ -195,20 +204,40 @@
             font-size: 12px; color: var(--text-secondary);
         }
         .place-desc { font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.4; }
-        
+
         /* Transport leg */
         .transport-leg {
             display: flex; align-items: center; gap: 8px;
             padding: 6px 14px; font-size: 12px; color: var(--text-secondary);
         }
         .transport-leg .arrow { color: var(--accent); }
-        
+
+        /* Verification badge */
+        .verif-banner {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px; border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+        .verif-banner.verified { background: rgba(34,197,94,0.08); color: var(--green); }
+        .verif-banner.partial { background: rgba(245,158,11,0.08); color: var(--orange); }
+        .verif-bar-track { flex:1; height:6px; background:#334155; border-radius:3px; overflow:hidden; }
+        .verif-bar-fill { height:100%; border-radius:3px; transition:width 0.6s; }
+        .verif-label { font-weight:600; white-space:nowrap; }
+        .verif-count { white-space:nowrap; }
+
+        .place-verif-badge {
+            display:inline-flex; align-items:center; gap:3px;
+            padding:1px 7px; border-radius:8px; font-size:11px; font-weight:600;
+        }
+        .place-verif-badge.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
+        .place-verif-badge.no { background:rgba(245,158,11,0.12); color:#f59e0b; }
+
         /* Explanation */
         .explanation {
             padding: 14px 20px; border-top: 1px solid var(--border);
             font-size: 13px; line-height: 1.5; color: var(--text-secondary);
         }
-        
+
         /* Input */
         .input-container {
             background: var(--bg-secondary); border-top: 1px solid var(--border); padding: 14px 24px;
@@ -238,46 +267,46 @@
         <div class="header">
             <div class="header-left">
                 <div>
-                    <div class="logo">✈️ AR-VPlanner</div>
+                    <div class="logo">AR-VPlanner</div>
                     <div class="subtitle">Google Places & Maps Powered Itinerary</div>
                 </div>
             </div>
             <div class="status-badge"><span class="status-dot"></span>AI Planner Active</div>
         </div>
-        
+
         <div class="chat-container" id="chatContainer">
             <div class="welcome" id="welcomeScreen">
                 <div class="welcome-icon">🗺️</div>
-                <h1>Gezi Rotanızı Oluşturalım</h1>
-                <p>Bir şehir, tarih ve bütçe belirtin — günlük rota, konaklama, ulaşım süreleri ve bütçe dağılımı ile tam bir plan oluşturalım</p>
+                <h1>Gezi Rotanizi Olusturalim</h1>
+                <p>Bir sehir, gun sayisi ve butce belirtin — gunluk rota, konaklama, ulasim sureleri ve butce dagilimi ile tam bir plan olusturalim</p>
                 <div class="example-prompts">
-                    <div class="example-prompt" onclick="sendExamplePrompt('İstanbul\'da 3 günlük bir gezi planla, bütçem 5000 TL')">
-                        <div class="example-prompt-title">🏛️ İstanbul Kültür</div>
-                        <div class="example-prompt-text">3 gün, 5000 TL</div>
+                    <div class="example-prompt" onclick="sendExamplePrompt('Istanbul\'da 3 gunluk bir gezi planla, butcem 5000 TL')">
+                        <div class="example-prompt-title">🏛️ Istanbul Kultur</div>
+                        <div class="example-prompt-text">3 gun, 5000 TL</div>
                     </div>
-                    <div class="example-prompt" onclick="sendExamplePrompt('Antalya\'da 4 günlük tatil planı yap, 8000 TL bütçe')">
+                    <div class="example-prompt" onclick="sendExamplePrompt('Antalya\'da 4 gunluk tatil plani yap, 8000 TL butce')">
                         <div class="example-prompt-title">🏖️ Antalya Tatil</div>
-                        <div class="example-prompt-text">4 gün, 8000 TL</div>
+                        <div class="example-prompt-text">4 gun, 8000 TL</div>
                     </div>
-                    <div class="example-prompt" onclick="sendExamplePrompt('İzmir\'de 2 günlük gezi, bütçe 3000 TL, tarih ve deniz ilgim var')">
-                        <div class="example-prompt-title">🌊 İzmir Keşif</div>
-                        <div class="example-prompt-text">2 gün, 3000 TL</div>
+                    <div class="example-prompt" onclick="sendExamplePrompt('Cesme\'de 2 gunluk gezi, butce 3000 TL, deniz ilgim var')">
+                        <div class="example-prompt-title">🌊 Cesme Kesif</div>
+                        <div class="example-prompt-text">2 gun, 3000 TL</div>
                     </div>
-                    <div class="example-prompt" onclick="sendExamplePrompt('Kapadokya\'da 2 günlük macera planla, 4000 TL')">
+                    <div class="example-prompt" onclick="sendExamplePrompt('Kapadokya\'da 2 gunluk macera planla, 4000 TL')">
                         <div class="example-prompt-title">🎈 Kapadokya</div>
-                        <div class="example-prompt-text">2 gün, 4000 TL</div>
+                        <div class="example-prompt-text">2 gun, 4000 TL</div>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <div class="input-container">
             <div class="input-wrapper">
-                <textarea id="messageInput" class="input-box" 
-                    placeholder="Sehir, gün sayısı ve bütçe yazın... (Örn: İstanbul'da 3 gün, 5000 TL)" rows="1"></textarea>
+                <textarea id="messageInput" class="input-box"
+                    placeholder="Sehir, gun sayisi ve butce yazin... (Orn: Cesme'de 3 gun, 5000 TL)" rows="1"></textarea>
                 <button id="sendButton" class="send-button" onclick="sendMessage()">➤</button>
             </div>
-            <div class="input-hint">💡 Serbest sohbet veya gezi planı oluşturabilirsiniz</div>
+            <div class="input-hint">Serbest sohbet veya gezi plani olusturabilirsiniz</div>
         </div>
     </div>
 
@@ -287,46 +316,134 @@ const messageInput = document.getElementById('messageInput');
 const sendButton = document.getElementById('sendButton');
 const welcomeScreen = document.getElementById('welcomeScreen');
 let chatHistory = [];
+let pendingPlan = null;
+let mapCounter = 0;
+const DAY_COLORS = ['#8b5cf6','#3b82f6','#22c55e','#f59e0b','#ec4899','#ef4444','#06b6d4'];
 
 messageInput.addEventListener('input', function() { this.style.height='auto'; this.style.height=this.scrollHeight+'px'; });
 messageInput.addEventListener('keydown', function(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} });
 
 function sendExamplePrompt(t) { messageInput.value=t; sendMessage(); }
 
-function isTravelRequest(msg) {
-    const tw = [/plan\s*(oluştur|yap|hazırla|la)/i,/gezi\s*plan/i,/seyahat/i,/tatil\s*plan/i,/günlük.*gezi/i,/gün.*plan/i,/bütçe.*TL/i,/\d+\s*TL/i,/\d+\s*gün/i];
-    const lw = /(İstanbul|İzmir|Antalya|Kapadokya|Ankara|Bodrum|Marmaris|Fethiye|Trabzon|Bursa|Konya|Muğla|Eskişehir|Gaziantep)/i;
-    return tw.some(r=>r.test(msg)) || (lw.test(msg)&&msg.length>15);
+// ======= CITY LIST (expanded) =======
+const CITY_NAMES = [
+    'Istanbul','Izmir','Antalya','Kapadokya','Ankara','Bodrum','Marmaris','Fethiye',
+    'Trabzon','Bursa','Konya','Mugla','Eskisehir','Gaziantep',
+    'Cesme','Alacati','Datca','Ayvalik','Kusadasi','Urfa','Sanliurfa',
+    'Side','Kas','Dalyan','Pamukkale','Denizli','Safranbolu','Amasra','Sinop',
+    'Edirne','Canakkale','Bergama','Sirince','Selcuk','Didim','Gocek','Oludeniz',
+    'Kemer','Belek','Alanya','Mersin','Adana','Samsun','Giresun','Rize','Artvin',
+    'Mardin','Diyarbakir','Van','Kars','Hatay','Antakya','Bolu','Abant',
+    'Isparta','Afyon','Eskisehir','Nevsehir','Goreme','Urgup','Avanos',
+    'Kusadasi','Didim','Cesme','Ilica','Ildiri','Sigacik',
+    // Turkish-character variants
+    'İstanbul','İzmir','Çeşme','Alaçatı','Datça','Ayvalık','Kuşadası',
+    'Şanlıurfa','Kaş','Muğla','Eskişehir','Nevşehir','Göreme','Ürgüp',
+    'Pamukkale','Çanakkale','Şirince','Selçuk','Ölüdeniz','Gökçeada','Bozcaada',
+    'Fethiye','Göcek','Safranbolu','Amasya','Mardin','Diyarbakır','Hatay',
+    'Bolu','Isparta','Afyonkarahisar'
+];
+
+const cityRegex = new RegExp('\\b(' + CITY_NAMES.join('|') + ')\\b', 'i');
+const locativeSuffixRegex = /([A-ZÇĞİÖŞÜa-zçğıöşü]{3,})[''\u2019]?\s*(?:[dD][eaEA]|[tT][eaEA])\b/;
+
+function extractCity(msg) {
+    const directMatch = msg.match(cityRegex);
+    if (directMatch) return directMatch[1];
+
+    const locMatch = msg.match(locativeSuffixRegex);
+    if (locMatch) {
+        const candidate = locMatch[1];
+        if (candidate.length >= 3 && !/^(ben|sen|biz|gün|plan|gezi|tatil|otel)$/i.test(candidate)) {
+            return candidate;
+        }
+    }
+    return null;
 }
 
+function isTravelRequest(msg) {
+    const tw = [/plan\s*(oluştur|olustur|yap|hazırla|hazirla|la)/i,/gezi\s*plan/i,/seyahat/i,/tatil\s*plan/i,/günlük.*gezi/i,/gunluk.*gezi/i,/gün.*plan/i,/gun.*plan/i,/bütçe.*TL/i,/butce.*TL/i,/\d+\s*TL/i,/\d+\s*(gün|gun)/i];
+    if (tw.some(r => r.test(msg))) return true;
+    const city = extractCity(msg);
+    if (city && msg.length > 10) return true;
+    return false;
+}
+
+function parseUserRequest(msg) {
+    const today = new Date();
+    const location = extractCity(msg) || null;
+
+    const budgetM = msg.match(/(\d[\d.]*)\s*(TL|tl|lira)/);
+    const budget = budgetM ? parseFloat(budgetM[1]) : null;
+
+    const daysM = msg.match(/(\d+)\s*(gün|günlük|gun|gunluk)/i);
+    const numDays = daysM ? parseInt(daysM[1]) : null;
+
+    const interests = [];
+    if(msg.match(/(kültür|kultur|tarih|müze|muze)/i)) interests.push('kültür');
+    if(msg.match(/(deniz|plaj|sahil)/i)) interests.push('deniz');
+    if(msg.match(/(doğa|doga|dağ|dag|yürüyüş|yuruyus)/i)) interests.push('doğa');
+    if(msg.match(/(yemek|restoran|mutfak)/i)) interests.push('yemek');
+    if(msg.match(/(macera|ekstrem|spor)/i)) interests.push('macera');
+    if(msg.match(/(romantik|balayı|balayi)/i)) interests.push('romantik');
+
+    const endDate = numDays ? new Date(today.getTime() + numDays * 86400000) : null;
+
+    return {
+        location,
+        budget,
+        numDays,
+        start_date: today.toISOString().split('T')[0],
+        end_date: endDate ? endDate.toISOString().split('T')[0] : null,
+        interests: interests.length ? interests : ['genel'],
+        constraints: {}
+    };
+}
+
+// ======= SEND MESSAGE WITH VALIDATION =======
 async function sendMessage() {
     const message = messageInput.value.trim();
     if(!message) return;
     if(welcomeScreen) welcomeScreen.style.display='none';
-    
+
     addMessage(message,'user');
     chatHistory.push({role:'user',content:message});
     messageInput.value=''; messageInput.style.height='auto';
-    const typingId = addTypingIndicator();
     sendButton.disabled = true;
-    
+
     try {
-        if(isTravelRequest(message)) {
-            const planData = parseUserRequest(message);
-            const resp = await fetch('/api/generate-plan',{
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify(planData)
-            });
-            const data = await resp.json();
-            removeTypingIndicator(typingId);
-            
-            if(data.success) {
-                displayItinerary(data.itinerary);
-                chatHistory.push({role:'assistant',content:'Gezi planı oluşturuldu.'});
+        if (pendingPlan) {
+            const fill = parseUserRequest(message);
+            if (fill.location) pendingPlan.location = fill.location;
+            if (fill.budget) pendingPlan.budget = fill.budget;
+            if (fill.numDays) {
+                pendingPlan.numDays = fill.numDays;
+                const ed = new Date();
+                ed.setDate(ed.getDate() + fill.numDays);
+                pendingPlan.end_date = ed.toISOString().split('T')[0];
+            }
+            if (fill.interests[0] !== 'genel') pendingPlan.interests = fill.interests;
+
+            const missing = getMissing(pendingPlan);
+            if (missing) {
+                addMessage(missing, 'assistant');
+                chatHistory.push({role:'assistant',content:missing});
             } else {
-                addMessage('Üzgünüm: ' + data.message, 'assistant');
+                await submitPlan(pendingPlan);
+                pendingPlan = null;
+            }
+        } else if (isTravelRequest(message)) {
+            const planData = parseUserRequest(message);
+            const missing = getMissing(planData);
+            if (missing) {
+                pendingPlan = planData;
+                addMessage(missing, 'assistant');
+                chatHistory.push({role:'assistant',content:missing});
+            } else {
+                await submitPlan(planData);
             }
         } else {
+            const typingId = addTypingIndicator();
             const resp = await fetch('/api/chat',{
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({message, history: chatHistory.slice(-10)})
@@ -337,38 +454,41 @@ async function sendMessage() {
             if(data.success) chatHistory.push({role:'assistant',content:data.response});
         }
     } catch(err) {
-        removeTypingIndicator(typingId);
-        addMessage('Bağlantı hatası. Tekrar deneyin.','assistant');
+        addMessage('Baglanti hatasi. Tekrar deneyin.','assistant');
     } finally { sendButton.disabled=false; }
 }
 
-function parseUserRequest(msg) {
-    const today = new Date();
-    const locM = msg.match(/(İstanbul|İzmir|Antalya|Kapadokya|Ankara|Bodrum|Marmaris|Fethiye|Trabzon|Bursa|Konya|Muğla|Eskişehir|Gaziantep)/i);
-    const location = locM ? locM[0] : 'İstanbul';
-    const budgetM = msg.match(/(\d+)\s*(TL|tl|lira)/);
-    const budget = budgetM ? parseFloat(budgetM[1]) : 5000;
-    const daysM = msg.match(/(\d+)\s*(gün|günlük)/);
-    const numDays = daysM ? parseInt(daysM[1]) : 3;
-    const endDate = new Date(today); endDate.setDate(endDate.getDate() + numDays);
-    
-    const interests = [];
-    if(msg.match(/(kültür|tarih|müze)/i)) interests.push('kültür');
-    if(msg.match(/(deniz|plaj|sahil)/i)) interests.push('deniz');
-    if(msg.match(/(doğa|dağ|yürüyüş)/i)) interests.push('doğa');
-    if(msg.match(/(yemek|restoran|mutfak)/i)) interests.push('yemek');
-    if(msg.match(/(macera|ekstrem|spor)/i)) interests.push('macera');
-    if(msg.match(/(romantik|balayı)/i)) interests.push('romantik');
-    
-    return {
-        location, budget,
-        start_date: today.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        interests: interests.length ? interests : ['genel'],
-        constraints: {}
-    };
+function getMissing(p) {
+    const parts = [];
+    if (!p.location) parts.push('Hangi sehir icin plan yapayim?');
+    if (!p.budget) parts.push('Butceniz ne kadar? (ornek: 5000 TL)');
+    if (!p.numDays) parts.push('Kac gunluk bir gezi planliyorsunuz? (ornek: 3 gun)');
+    return parts.length ? parts.join(' ') : null;
 }
 
+async function submitPlan(planData) {
+    const typingId = addTypingIndicator();
+    try {
+        const resp = await fetch('/api/generate-plan',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(planData)
+        });
+        const data = await resp.json();
+        removeTypingIndicator(typingId);
+
+        if(data.success) {
+            displayItinerary(data.itinerary);
+            chatHistory.push({role:'assistant',content:'Gezi plani olusturuldu.'});
+        } else {
+            addMessage('Uzgunum: ' + data.message, 'assistant');
+        }
+    } catch(err) {
+        removeTypingIndicator(typingId);
+        addMessage('Plan olusturulurken hata olustu. Tekrar deneyin.','assistant');
+    }
+}
+
+// ======= CHAT HELPERS =======
 function addMessage(content, role) {
     const d = document.createElement('div'); d.className=`message ${role}`;
     const av = document.createElement('div'); av.className=`avatar ${role}`; av.textContent=role==='user'?'👤':'🤖';
@@ -391,11 +511,12 @@ function displayItinerary(itin) {
     const d = document.createElement('div'); d.className='message assistant';
     const av = document.createElement('div'); av.className='avatar assistant'; av.textContent='🤖';
     const wrapper = document.createElement('div'); wrapper.style.maxWidth='700px'; wrapper.style.width='100%';
-    
+
+    const mapId = 'itin-map-' + (mapCounter++);
     const b = itin.budget;
     const usagePct = Math.min((b.total / b.user_budget)*100, 100).toFixed(0);
     const barColor = b.remaining >= 0 ? 'linear-gradient(90deg, #22c55e, #3b82f6)' : 'linear-gradient(90deg, #ef4444, #f59e0b)';
-    
+
     let accHtml = '';
     if(itin.accommodation) {
         const a = itin.accommodation;
@@ -404,84 +525,102 @@ function displayItinerary(itin) {
             <div class="accom-icon">🏨</div>
             <div class="accom-info">
                 <div class="accom-name">${a.name}</div>
-                <div class="accom-detail">${a.address} • ${a.rating}⭐ • ${a.total_nights} gece</div>
+                <div class="accom-detail">${a.address} - ${a.rating} yildiz - ${a.total_nights} gece</div>
             </div>
             <div class="accom-price">${a.price_per_night.toFixed(0)} TL/gece</div>
         </div>`;
     }
-    
-    // Day tabs
+
     let tabsHtml = '';
     let daysHtml = '';
     itin.days.forEach((day, idx) => {
-        tabsHtml += `<div class="day-tab ${idx===0?'active':''}" onclick="switchDay(this, ${idx})">${day.day_number}. Gün</div>`;
-        
+        tabsHtml += `<div class="day-tab ${idx===0?'active':''}" onclick="switchDay(this, ${idx})">${day.day_number}. Gun</div>`;
+
         let placesHtml = '';
         day.places.forEach((p, pi) => {
+            const verifBadge = p.verified
+                ? `<span class="place-verif-badge ok">Dogruland&#305;</span>`
+                : `<span class="place-verif-badge no">Dogrulanmadi</span>`;
             placesHtml += `
             <div class="place-card">
                 <div class="place-top">
-                    <div class="place-name">${p.name}</div>
+                    <div class="place-name">${p.name} ${verifBadge}</div>
                     <div class="place-cost">${p.estimated_cost.toFixed(0)} TL</div>
                 </div>
                 <div class="place-meta">
-                    <span>🏷️ ${p.category}</span>
-                    <span>⏱️ ${p.duration_minutes} dk</span>
-                    ${p.rating ? `<span>⭐ ${p.rating}</span>` : ''}
-                    <span>📍 ${p.address ? p.address.substring(0,40) : ''}</span>
+                    <span>${p.category}</span>
+                    <span>${p.duration_minutes} dk</span>
+                    ${p.rating ? `<span>${p.rating} yildiz</span>` : ''}
+                    <span>${p.address ? p.address.substring(0,40) : ''}</span>
                 </div>
                 ${p.description ? `<div class="place-desc">${p.description}</div>` : ''}
             </div>`;
-            
-            // Transport leg between places
+
             if(pi < day.transport_legs.length) {
                 const leg = day.transport_legs[pi];
                 if(leg) {
                     placesHtml += `
                     <div class="transport-leg">
-                        <span class="arrow">↓</span>
-                        🚗 ${leg.distance} • ${leg.duration}
+                        <span class="arrow">|</span>
+                        ${leg.distance} - ${leg.duration}
                     </div>`;
                 }
             }
         });
-        
+
         daysHtml += `
         <div class="day-content ${idx===0?'active':''}" id="day-${idx}">
             <div class="day-summary">
-                <span>📍 ${day.places.length} yer</span>
-                <span>💰 ${day.day_total.toFixed(0)} TL</span>
-                <span>🎯 Etkinlik: ${day.activities_cost.toFixed(0)} TL</span>
-                <span>🍽️ Yemek: ${day.meals_cost.toFixed(0)} TL</span>
-                <span>🚗 Ulaşım: ${day.transport_cost.toFixed(0)} TL</span>
+                <span>${day.places.length} yer</span>
+                <span>${day.day_total.toFixed(0)} TL</span>
+                <span>Etkinlik: ${day.activities_cost.toFixed(0)} TL</span>
+                <span>Yemek: ${day.meals_cost.toFixed(0)} TL</span>
+                <span>Ulasim: ${day.transport_cost.toFixed(0)} TL</span>
             </div>
             ${placesHtml}
         </div>`;
     });
-    
+
+    const v = itin.verification || {};
+    const vCount = v.verified_count || 0;
+    const vTotal = v.total_places || 0;
+    const vPct = vTotal > 0 ? Math.round((vCount/vTotal)*100) : 0;
+    const vClass = vPct >= 50 ? 'verified' : 'partial';
+    const vBarColor = vPct >= 50 ? 'var(--green)' : 'var(--orange)';
+    const verifBannerHtml = vTotal > 0 ? `
+        <div class="verif-banner ${vClass}">
+            <span class="verif-label">RAG Dogrulama</span>
+            <div class="verif-bar-track">
+                <div class="verif-bar-fill" style="width:${vPct}%;background:${vBarColor}"></div>
+            </div>
+            <span class="verif-count">${vCount}/${vTotal} yer dogrulandi</span>
+        </div>` : '';
+
     wrapper.innerHTML = `
     <div class="itinerary-card">
         <div class="itin-header">
-            <h2>🗺️ ${itin.city} - ${itin.total_days} Günlük Rota</h2>
+            <h2>${itin.city} - ${itin.total_days} Gunluk Rota</h2>
             <p>${itin.explanation || ''}</p>
         </div>
-        
+        <div id="${mapId}" class="itin-map"></div>
+        ${verifBannerHtml}
+
         <div class="budget-section">
             <div class="budget-grid">
                 <div class="budget-item">
-                    <div class="budget-label">🏨 Konaklama</div>
+                    <div class="budget-label">Konaklama</div>
                     <div class="budget-value" style="color:var(--pink)">${b.accommodation.toFixed(0)} TL</div>
                 </div>
                 <div class="budget-item">
-                    <div class="budget-label">🎯 Etkinlik</div>
+                    <div class="budget-label">Etkinlik</div>
                     <div class="budget-value" style="color:var(--accent)">${b.activities.toFixed(0)} TL</div>
                 </div>
                 <div class="budget-item">
-                    <div class="budget-label">🍽️ Yemek</div>
+                    <div class="budget-label">Yemek</div>
                     <div class="budget-value" style="color:var(--orange)">${b.food.toFixed(0)} TL</div>
                 </div>
                 <div class="budget-item">
-                    <div class="budget-label">🚗 Ulaşım</div>
+                    <div class="budget-label">Ulasim</div>
                     <div class="budget-value" style="color:var(--blue)">${b.transport.toFixed(0)} TL</div>
                 </div>
             </div>
@@ -489,30 +628,105 @@ function displayItinerary(itin) {
                 <div class="budget-fill" style="width:${usagePct}%;background:${barColor}"></div>
             </div>
             <div class="budget-remaining">
-                ${b.remaining >= 0 
-                    ? `✅ Kalan: ${b.remaining.toFixed(0)} TL / ${b.user_budget.toFixed(0)} TL bütçe`
-                    : `⚠️ Bütçe aşımı: ${Math.abs(b.remaining).toFixed(0)} TL`
+                ${b.remaining >= 0
+                    ? `Kalan: ${b.remaining.toFixed(0)} TL / ${b.user_budget.toFixed(0)} TL butce`
+                    : `Butce asimi: ${Math.abs(b.remaining).toFixed(0)} TL`
                 }
             </div>
         </div>
-        
+
         ${accHtml}
-        
+
         <div class="day-tabs">${tabsHtml}</div>
         ${daysHtml}
     </div>`;
-    
-    d.appendChild(av); d.appendChild(wrapper); chatContainer.appendChild(d); scrollToBottom();
+
+    d.appendChild(av); d.appendChild(wrapper); chatContainer.appendChild(d);
+    scrollToBottom();
+
+    // Initialize Leaflet map
+    setTimeout(() => { initMap(mapId, itin); }, 100);
+}
+
+// ======= LEAFLET MAP =======
+const mapInstances = {};
+
+function initMap(mapId, itin) {
+    const container = document.getElementById(mapId);
+    if (!container) return;
+
+    const map = L.map(mapId, { zoomControl: true, attributionControl: true });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OSM &amp; CARTO',
+        maxZoom: 18
+    }).addTo(map);
+
+    const allMarkers = [];
+    const dayLayers = [];
+
+    itin.days.forEach((day, dayIdx) => {
+        const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
+        const layerGroup = L.layerGroup().addTo(map);
+        const dayMarkers = [];
+
+        day.places.forEach((p, pi) => {
+            if (!p.lat || !p.lng) return;
+            const marker = L.circleMarker([p.lat, p.lng], {
+                radius: 9, fillColor: color, color: '#fff',
+                weight: 2, opacity: 1, fillOpacity: 0.9
+            }).addTo(layerGroup);
+            marker.bindTooltip(`${pi+1}. ${p.name}`, {
+                permanent: false, direction: 'top',
+                className: 'map-tooltip'
+            });
+            dayMarkers.push([p.lat, p.lng]);
+            allMarkers.push([p.lat, p.lng]);
+        });
+
+        if (dayMarkers.length >= 2) {
+            L.polyline(dayMarkers, {
+                color: color, weight: 3, opacity: 0.7, dashArray: '8,6'
+            }).addTo(layerGroup);
+        }
+
+        dayLayers.push(layerGroup);
+    });
+
+    if (itin.accommodation && itin.accommodation.lat && itin.accommodation.lng) {
+        const accLatLng = [itin.accommodation.lat, itin.accommodation.lng];
+        L.marker(accLatLng, {
+            icon: L.divIcon({
+                html: '<div style="font-size:22px">🏨</div>',
+                iconSize: [28,28], iconAnchor: [14,14], className: ''
+            })
+        }).addTo(map).bindTooltip(itin.accommodation.name, { direction: 'top' });
+        allMarkers.push(accLatLng);
+    }
+
+    if (allMarkers.length > 0) {
+        map.fitBounds(allMarkers, { padding: [30, 30], maxZoom: 14 });
+    }
+
+    mapInstances[mapId] = { map, dayLayers };
 }
 
 function switchDay(tab, idx) {
-    // Tabs
-    tab.parentElement.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
+    tab.parentElement.querySelectorAll('.day-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    // Content
+
     const card = tab.closest('.itinerary-card');
-    card.querySelectorAll('.day-content').forEach(c=>c.classList.remove('active'));
+    card.querySelectorAll('.day-content').forEach(c => c.classList.remove('active'));
     card.querySelector(`#day-${idx}`).classList.add('active');
+
+    const mapEl = card.querySelector('.itin-map');
+    if (!mapEl) return;
+    const mId = mapEl.id;
+    const inst = mapInstances[mId];
+    if (!inst) return;
+
+    inst.dayLayers.forEach((layer, i) => {
+        layer.eachLayer(sub => { sub.setStyle ? sub.setStyle({ opacity: i===idx?1:0.2, fillOpacity: i===idx?0.9:0.15 }) : null; });
+    });
 }
 
 function scrollToBottom() { chatContainer.scrollTop = chatContainer.scrollHeight; }

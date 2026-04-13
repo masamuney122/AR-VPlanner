@@ -2,7 +2,7 @@
 
 # Model Ayarları
 models:
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
   nli_model: "microsoft/deberta-v3-base"
   llm_model: "meta-llama/Llama-3.2-3B-Instruct"  # Llama 3.2 3B Instruct (chat template destekli)
   llm_type: "transformers"  # "transformers" veya "llama-cpp"
@@ -10,7 +10,7 @@ models:
   
 # Vektör Deposu Ayarları
 vector_store:
-  dimension: 384  # all-MiniLM-L6-v2 için
+  dimension: 384  # paraphrase-multilingual-MiniLM-L12-v2 için
   index_type: "L2"  # L2 distance
   
 # API Ayarları
@@ -28,6 +28,11 @@ web:
   host: "0.0.0.0"
   port: 5001
   debug: true
+
+# Bilgi Tabanı (RAG)
+knowledge_base:
+  directory: "data/knowledge_base"
+  top_k: 5
 
 # Veri Kaynakları
 data_sources:
@@ -48,8 +53,4 @@ itinerary:
   meal_budget_per_day: 300  # TL - günlük yemek bütçesi tahmini
   transport_budget_per_day: 100  # TL - günlük ulaşım tahmini
   buffer_percentage: 10     # % - ekstra masraf tamponu
-
-
-
-
 

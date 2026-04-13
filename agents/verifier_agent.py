@@ -1,218 +1,150 @@
 """
 Doğrulama Ajanı (Verifier Agent)
-Olgusal uyumu kontrol eder - NLI modelleri kullanır
+RAG bilgi tabanını kullanarak itinerary'deki yerleri çapraz doğrular.
+Her yer için bilgi tabanında kanıt arar ve doğrulama skoru üretir.
 """
 from typing import List, Dict, Any
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
-from models.data_models import Activity, TravelPlan, AgentResponse, Evidence
-from models.message_models import MessageType
-from utils.config import config
-from utils.message_bus import message_bus
+from models.data_models import Itinerary, Place, Evidence, AgentResponse
+from utils.vector_store import vector_store
 
 
 class VerifierAgent:
-    """Doğrulama Ajanı - Olgusal doğrulama"""
-    
-    def __init__(self):
-        self.agent_name = "verifier"
-        self.model_name = config.get('models.nli_model', 'microsoft/deberta-v3-base')
-        self.tokenizer = None
-        self.model = None
-        self._load_model()
-        self._register_message_handler()
-    
-    def _register_message_handler(self):
-        """Mesajlaşma sistemine kayıt ol"""
-        message_bus.subscribe(self.agent_name, self._handle_message)
-    
-    def _handle_message(self, message):
-        """Gelen mesajları işle"""
-        if message.message_type == MessageType.REQUEST:
-            content = message.content
-            if content.get("event") == "plan_ready_for_verification":
-                # Plan doğrulama için hazır
-                pass
-    
-    def _load_model(self):
-        """NLI modelini yükle"""
-        try:
-            # Not: Gerçek uygulamada daha uygun bir NLI modeli kullanılmalı
-            # Örnek: 'microsoft/deberta-v3-base' veya 'roberta-large-mnli'
-            # Şimdilik basit bir yaklaşım kullanıyoruz
-            print(f"NLI modeli yükleniyor: {self.model_name}")
-            # Model yükleme işlemi (büyük modeller için GPU gerekebilir)
-            # self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            # self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
-            print("Model yükleme atlandı (demo modu)")
-        except Exception as e:
-            print(f"Model yükleme hatası: {str(e)}")
-            print("Basit doğrulama modu kullanılıyor")
-    
-    def verify_plan(self, plan: TravelPlan, evidence_list: List[Evidence]) -> AgentResponse:
+    """Doğrulama Ajanı — RAG tabanlı çapraz doğrulama"""
+
+    VERIFICATION_THRESHOLD = 0.3
+
+    def verify_itinerary(
+        self,
+        itinerary: Itinerary,
+        rag_context: List[Evidence],
+    ) -> AgentResponse:
         """
-        Planın kanıtlarla uyumunu doğrula
-        
-        Args:
-            plan: Doğrulanacak seyahat planı
-            evidence_list: Kanıt listesi
-        
+        Itinerary'deki her yeri RAG bilgi tabanı ile çapraz doğrula.
+
+        Her yer için:
+        1. Bilgi tabanından en alakalı paragrafları bul (FAISS)
+        2. Yer adının paragrafta geçip geçmediğini kontrol et
+        3. Semantik benzerlik skoru hesapla
+        4. Birleşik doğrulama skoru üret
+
         Returns:
-            AgentResponse: Doğrulama sonuçları
+            AgentResponse with verification details per place
         """
         try:
-            # Mesajlaşma: Doğrulama başladı
-            message_bus.send_message(
-                sender=self.agent_name,
-                receiver="broadcast",
-                message_type=MessageType.STATUS_UPDATE,
-                content={
-                    "event": "verification_started",
-                    "activity_count": len(plan.activities)
-                }
-            )
-            
-            if not plan.activities:
+            all_places = [p for day in itinerary.days for p in day.places]
+            if not all_places:
                 return AgentResponse(
-                    success=False,
-                    data=plan,
-                    message="Doğrulanacak etkinlik bulunamadı",
-                    metadata={}
+                    success=True, data=itinerary,
+                    message="Doğrulanacak yer bulunamadı",
+                    metadata={"overall_score": 0, "verified": False}
                 )
-            
-            verification_details = {}
-            all_verified = True
-            
-            for activity in plan.activities:
-                # Her etkinlik için kanıt kontrolü yap
-                verification_result = self._verify_activity(activity, evidence_list)
-                activity.verification_score = verification_result['score']
-                verification_details[activity.name] = verification_result
-                
-                if verification_result['score'] < 0.5:  # Eşik değer
-                    all_verified = False
-            
-            # Plan seviyesinde doğrulama
-            plan.verified = all_verified
-            plan.verification_details = verification_details
-            
-            overall_score = sum(
-                act.verification_score for act in plan.activities
-            ) / len(plan.activities) if plan.activities else 0.0
-            
-            # Mesajlaşma: Doğrulama tamamlandı
-            message_bus.send_message(
-                sender=self.agent_name,
-                receiver="broadcast",
-                message_type=MessageType.NOTIFICATION,
-                content={
-                    "event": "verification_completed",
-                    "overall_score": overall_score,
-                    "verified": all_verified
-                }
-            )
-            
+
+            verification_details: Dict[str, Dict[str, Any]] = {}
+            total_score = 0.0
+            verified_count = 0
+
+            for place in all_places:
+                result = self._verify_place(place, rag_context)
+                verification_details[place.name] = result
+                total_score += result["score"]
+                if result["score"] >= self.VERIFICATION_THRESHOLD:
+                    verified_count += 1
+
+            overall_score = total_score / len(all_places) if all_places else 0
+            verification_ratio = verified_count / len(all_places) if all_places else 0
+
+            itinerary.verified = verification_ratio >= 0.5
+            itinerary.verification_details = {
+                "overall_score": round(overall_score, 3),
+                "verified_count": verified_count,
+                "total_places": len(all_places),
+                "verification_ratio": round(verification_ratio, 3),
+                "per_place": verification_details
+            }
+
             return AgentResponse(
                 success=True,
-                data=plan,
-                message=f"Doğrulama tamamlandı. Genel skor: {overall_score:.2f}",
+                data=itinerary,
+                message=(
+                    f"Doğrulama tamamlandı: {verified_count}/{len(all_places)} yer doğrulandı "
+                    f"(skor: {overall_score:.2f})"
+                ),
                 metadata={
-                    "overall_score": overall_score,
-                    "verified": all_verified,
-                    "verification_details": verification_details
+                    "overall_score": round(overall_score, 3),
+                    "verified_count": verified_count,
+                    "total_places": len(all_places),
+                    "verification_ratio": round(verification_ratio, 3),
                 }
             )
-        
-        except Exception as e:
-            # Mesajlaşma: Hata durumu
-            message_bus.send_message(
-                sender=self.agent_name,
-                receiver="broadcast",
-                message_type=MessageType.ERROR,
-                content={
-                    "event": "verification_error",
-                    "error": str(e)
-                }
-            )
-            
-            return AgentResponse(
-                success=False,
-                data=plan,
-                message=f"Doğrulama hatası: {str(e)}",
-                metadata={"error": str(e)}
-            )
-    
-    def _verify_activity(self, activity: Activity, evidence_list: List[Evidence]) -> Dict[str, Any]:
-        """
-        Tek bir etkinliği kanıtlarla doğrula
-        
-        Args:
-            activity: Doğrulanacak etkinlik
-            evidence_list: Kanıt listesi
-        
-        Returns:
-            Doğrulama sonucu
-        """
-        # Basit bir doğrulama yaklaşımı
-        # Gerçek uygulamada NLI modeli kullanılacak
-        
-        activity_text = f"{activity.name} {activity.description} {activity.location}"
-        activity_text_lower = activity_text.lower()
-        
-        matching_evidence = []
-        max_score = 0.0
-        
-        for evidence in evidence_list:
-            evidence_text_lower = evidence.content.lower()
-            
-            # Basit kelime eşleşmesi (gerçek uygulamada NLI kullanılacak)
-            activity_words = set(activity_text_lower.split())
-            evidence_words = set(evidence_text_lower.split())
-            
-            # Jaccard benzerliği
-            intersection = len(activity_words & evidence_words)
-            union = len(activity_words | evidence_words)
-            similarity = intersection / union if union > 0 else 0.0
-            
-            # Relevance score ile birleştir
-            combined_score = similarity * evidence.relevance_score
-            
-            if combined_score > 0.1:  # Eşik değer
-                matching_evidence.append({
-                    "evidence": evidence.content[:100],  # İlk 100 karakter
-                    "source": evidence.source,
-                    "score": combined_score
-                })
-                max_score = max(max_score, combined_score)
-        
-        # NLI modeli kullanılırsa (şimdilik basit yaklaşım)
-        # premise = evidence.content
-        # hypothesis = f"{activity.name} is located in {activity.location}"
-        # score = self._nli_inference(premise, hypothesis)
-        
-        return {
-            "score": min(max_score, 1.0),
-            "matching_evidence_count": len(matching_evidence),
-            "matching_evidence": matching_evidence[:3]  # İlk 3 kanıt
-        }
-    
-    def _nli_inference(self, premise: str, hypothesis: str) -> float:
-        """
-        NLI modeli ile çıkarım yap (gerçek implementasyon)
-        
-        Args:
-            premise: Öncül (kanıt)
-            hypothesis: Hipotez (etkinlik bilgisi)
-        
-        Returns:
-            Doğruluk skoru (0-1)
-        """
-        # Gerçek implementasyon için:
-        # inputs = self.tokenizer(premise, hypothesis, return_tensors="pt", truncation=True)
-        # outputs = self.model(**inputs)
-        # probs = torch.softmax(outputs.logits, dim=-1)
-        # entailment_score = probs[0][2].item()  # ENTAILMENT label
-        
-        # Şimdilik basit bir placeholder
-        return 0.5
 
+        except Exception as e:
+            return AgentResponse(
+                success=True, data=itinerary,
+                message=f"Doğrulama hatası (plan yine de kullanılabilir): {e}",
+                metadata={"overall_score": 0, "error": str(e)}
+            )
+
+    def _verify_place(self, place: Place, rag_context: List[Evidence]) -> Dict[str, Any]:
+        """
+        Tek bir yeri RAG bilgi tabanıyla doğrula.
+
+        Üç sinyal kullanır:
+        1. name_match: Yer adı bilgi tabanı paragraflarında geçiyor mu?
+        2. semantic_score: FAISS semantik benzerlik skoru
+        3. rag_context_match: Önceden çekilmiş RAG context'te geçiyor mu?
+        """
+        place_name_lower = place.name.lower()
+        name_tokens = set(place_name_lower.split())
+
+        rag_match_score = self._check_rag_context(place_name_lower, name_tokens, rag_context)
+
+        faiss_score = 0.0
+        faiss_evidence = []
+        if vector_store.is_ready:
+            results = vector_store.search(place.name, top_k=3)
+            for ev in results:
+                ev_lower = ev.content.lower()
+                if self._fuzzy_name_match(place_name_lower, name_tokens, ev_lower):
+                    faiss_score = max(faiss_score, ev.relevance_score * 1.5)
+                    faiss_evidence.append(ev.content[:120])
+                else:
+                    faiss_score = max(faiss_score, ev.relevance_score * 0.5)
+
+        combined = max(rag_match_score, min(faiss_score, 1.0))
+
+        verified = combined >= self.VERIFICATION_THRESHOLD
+        return {
+            "score": round(combined, 3),
+            "verified": verified,
+            "evidence_snippets": faiss_evidence[:2],
+            "method": "rag_cross_reference"
+        }
+
+    def _check_rag_context(
+        self, name_lower: str, name_tokens: set, rag_context: List[Evidence]
+    ) -> float:
+        """Check if the place name appears in pre-fetched RAG context."""
+        if not rag_context:
+            return 0.0
+
+        best = 0.0
+        for ev in rag_context:
+            ev_lower = ev.content.lower()
+            if self._fuzzy_name_match(name_lower, name_tokens, ev_lower):
+                best = max(best, 0.8 * ev.relevance_score + 0.2)
+        return min(best, 1.0)
+
+    @staticmethod
+    def _fuzzy_name_match(name_lower: str, name_tokens: set, text_lower: str) -> bool:
+        """
+        Check whether a place name matches within a text block.
+        Handles partial matches for multi-word names.
+        """
+        if name_lower in text_lower:
+            return True
+
+        significant = {t for t in name_tokens if len(t) > 3}
+        if not significant:
+            return False
+        matched = sum(1 for t in significant if t in text_lower)
+        return matched / len(significant) >= 0.6

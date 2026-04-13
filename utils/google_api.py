@@ -4,15 +4,9 @@ Turistik yer, otel, restoran arama ve rota hesaplama
 """
 import os
 import requests
-from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
-from dotenv import load_dotenv
+from typing import List, Dict, Any, Optional
 from utils.config import config
-
-# .env'yi bir kez daha garanti olarak yükle
-_env_file = Path(__file__).resolve().parent.parent / '.env'
-if _env_file.exists():
-    load_dotenv(dotenv_path=_env_file, override=True)
 
 
 class GoogleAPI:
@@ -143,15 +137,32 @@ class GoogleAPI:
             'ankara': {'lat': 39.9334, 'lng': 32.8597},
             'antalya': {'lat': 36.8969, 'lng': 30.7133},
             'kapadokya': {'lat': 38.6431, 'lng': 34.8286},
+            'goreme': {'lat': 38.6431, 'lng': 34.8286},
             'bodrum': {'lat': 37.0345, 'lng': 27.4305},
             'fethiye': {'lat': 36.6221, 'lng': 29.1164},
             'marmaris': {'lat': 36.8547, 'lng': 28.2739},
             'trabzon': {'lat': 41.0015, 'lng': 39.7178},
             'bursa': {'lat': 40.1826, 'lng': 29.0665},
             'konya': {'lat': 37.8746, 'lng': 32.4932},
+            'cesme': {'lat': 38.3240, 'lng': 26.3038},
+            'alacati': {'lat': 38.2810, 'lng': 26.3730},
+            'datca': {'lat': 36.7280, 'lng': 27.6870},
+            'ayvalik': {'lat': 39.3125, 'lng': 26.6944},
+            'kusadasi': {'lat': 37.8579, 'lng': 27.2610},
+            'urfa': {'lat': 37.1674, 'lng': 38.7955},
+            'sanliurfa': {'lat': 37.1674, 'lng': 38.7955},
+            'side': {'lat': 36.7672, 'lng': 31.3886},
+            'kas': {'lat': 36.2020, 'lng': 29.6388},
+            'pamukkale': {'lat': 37.9204, 'lng': 29.1190},
+            'edirne': {'lat': 41.6772, 'lng': 26.5557},
+            'canakkale': {'lat': 40.1553, 'lng': 26.4142},
+            'safranbolu': {'lat': 41.2564, 'lng': 32.6926},
+            'mardin': {'lat': 37.3212, 'lng': 40.7245},
+            'alanya': {'lat': 36.5437, 'lng': 32.0000},
+            'kemer': {'lat': 36.5979, 'lng': 30.5594},
         }
         
-        city_lower = city.lower().replace('İ', 'i').replace('ı', 'i')
+        city_lower = city.lower().replace('İ', 'i').replace('ı', 'i').replace('ş', 's').replace('ç', 'c').replace('ö', 'o').replace('ü', 'u').replace('ğ', 'g')
         for key, coords in fallback.items():
             if key in city_lower or city_lower in key:
                 print(f"✓ Fallback koordinat kullanılıyor: {city} → {key}")
@@ -208,57 +219,6 @@ class GoogleAPI:
             print(f"❌ Places search hatası: {e}")
         
         return places
-    
-    def search_text(self, query: str, max_results: int = 10) -> List[Dict]:
-        """Metin bazlı yer araması"""
-        if not self.is_available:
-            return []
-        
-        url = f"{self.PLACES_BASE}/textsearch/json"
-        params = {
-            'query': query,
-            'key': self.api_key,
-            'language': 'tr'
-        }
-        
-        places = []
-        try:
-            resp = requests.get(url, params=params, timeout=self.timeout)
-            data = resp.json()
-            
-            if data.get('status') == 'OK':
-                for item in data.get('results', [])[:max_results]:
-                    place = self._parse_place(item, 'tourist_attraction')
-                    if place:
-                        places.append(place)
-        except Exception as e:
-            print(f"❌ Text search hatası: {e}")
-        
-        return places
-    
-    def get_place_details(self, place_id: str) -> Optional[Dict]:
-        """Place ID ile detaylı bilgi al"""
-        if not self.is_available:
-            return None
-        
-        url = f"{self.PLACES_BASE}/details/json"
-        params = {
-            'place_id': place_id,
-            'fields': 'name,formatted_address,geometry,rating,price_level,opening_hours,editorial_summary,types,user_ratings_total,photos',
-            'key': self.api_key,
-            'language': 'tr'
-        }
-        
-        try:
-            resp = requests.get(url, params=params, timeout=self.timeout)
-            data = resp.json()
-            
-            if data.get('status') == 'OK':
-                return data.get('result')
-        except Exception as e:
-            print(f"❌ Place details hatası: {e}")
-        
-        return None
     
     def _parse_place(self, raw: Dict, category_hint: str = '') -> Optional[Dict]:
         """API sonucunu standart formata çevir"""
@@ -382,54 +342,6 @@ class GoogleAPI:
                 }
         except Exception as e:
             print(f"❌ Directions hatası: {e}")
-        
-        return None
-    
-    def get_distance_matrix(
-        self,
-        origins: List[Tuple[float, float]],
-        destinations: List[Tuple[float, float]],
-        mode: str = 'driving'
-    ) -> Optional[List[List[Dict]]]:
-        """Çoklu nokta arası mesafe matrisi"""
-        if not self.is_available:
-            return None
-        
-        url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-        
-        origins_str = '|'.join(f"{lat},{lng}" for lat, lng in origins)
-        destinations_str = '|'.join(f"{lat},{lng}" for lat, lng in destinations)
-        
-        params = {
-            'origins': origins_str,
-            'destinations': destinations_str,
-            'mode': mode,
-            'key': self.api_key,
-            'language': 'tr'
-        }
-        
-        try:
-            resp = requests.get(url, params=params, timeout=self.timeout)
-            data = resp.json()
-            
-            if data.get('status') == 'OK':
-                matrix = []
-                for row in data.get('rows', []):
-                    row_data = []
-                    for elem in row.get('elements', []):
-                        if elem.get('status') == 'OK':
-                            row_data.append({
-                                'distance_text': elem['distance']['text'],
-                                'distance_meters': elem['distance']['value'],
-                                'duration_text': elem['duration']['text'],
-                                'duration_minutes': elem['duration']['value'] // 60,
-                            })
-                        else:
-                            row_data.append(None)
-                    matrix.append(row_data)
-                return matrix
-        except Exception as e:
-            print(f"❌ Distance matrix hatası: {e}")
         
         return None
     
